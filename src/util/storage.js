@@ -87,8 +87,13 @@ export const storage = {
 storage.sync = {
   async [CHANNELS]() {
     const { data } = await axios({ url: '/channels' });
+    const channelToNo = new Map();
 
     if (Array.isArray(data) && data.length) {
+      data.forEach((it) => {
+        channelToNo.set(it.channelNum, it);
+      });
+
       return data;
     } else {
       return [];

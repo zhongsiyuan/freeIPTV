@@ -1,7 +1,8 @@
 import React, { Component } from 'react';
 import { ActivityIndicator, Text, ToastAndroid, View } from 'react-native';
 import Video from 'react-native-video';
-import { debounce, mergeUrl, storage, storageKey } from '@/util';
+import { MobxContext } from '@/store';
+import { debounce, mergeUrl } from '@/util';
 import {
   AUTO_HIDE_INFO_TIMEOUT,
   AUTO_HIDE_MENU_TIMEOUT,
@@ -16,22 +17,18 @@ import { ARROW, CATEGORY, CATEGORY_OPT, MENU_FOCUS_AT, STATUS } from './constant
 import style from './player.style';
 
 class Player extends Component {
+  static contextType = MobxContext;
+
   constructor(props) {
     super(props);
 
     this.state = {
-      channels: [],
-      activeChannel: null,
-      activeCategory: CATEGORY.FAVOURITE,
       status: STATUS.IN_PLAY,
       menuFocusAt: MENU_FOCUS_AT.CHANNEL,
       infoVisible: false,
       inputNum: '',
       loading: true,
       error: null,
-      favorites: {},
-      recent: {},
-      recentChannels: [],
     };
 
     this.delayHideInfo = debounce(this.hideInfo, AUTO_HIDE_INFO_TIMEOUT);
@@ -52,158 +49,82 @@ class Player extends Component {
     this.props.onPressRef?.current?.delete(this.pubOnPress);
   }
 
-  static async getChannels() {
-    const data = await storage.load(storageKey.CHANNELS);
-    let prev = data[data.length - 1];
-
-    return data.map((channel, idx) => {
-      Object.assign(channel, {
-        ...channel,
-        index: idx,
-        prev,
-        next: data.length === idx + 1 ? data[0] : data[idx + 1],
-      });
-
-      prev = channel;
-
-      return channel;
-    });
-  }
-
-  get channelToChannelNum() {
-    const ret = new Map();
-
-    this.state.channels.forEach((it) => {
-      ret.set(it.channelNum.toString(), it);
-    });
-
-    return ret;
-  }
-
-  get favoriteSet() {
-    const ret = new Set();
-
-    Object.keys(this.state.favorites).forEach((id) => {
-      if (this.state.favorites[id]) {
-        ret.add(id.toString());
-      }
-    });
-
-    return ret;
-  }
-
-  get recentSet() {
-    const ret = new Set();
-
-    Object.keys(this.state.recent).forEach((id) => {
-      if (this.state.recent[id]) {
-        ret.add(id.toString());
-      }
-    });
-
-    return ret;
-  }
-
-  getMenuChannelsBySet(set) {
-    const ret = [];
-    set.forEach((id) => {
-      if (this.channelToChannelNum.has(id)) {
-        ret.push(this.channelToChannelNum.get(id));
-      }
-    });
-
-    return ret;
-  }
-
   get menuChannels() {
-    let ret = [];
+    const { channels, favorites, activeCategory } = this.context.player;
 
-    switch (this.state.activeCategory) {
+    let map = new Map();
+
+    switch (activeCategory) {
       case CATEGORY.FAVOURITE:
-        ret = this.getMenuChannelsBySet(this.favoriteSet);
+        map = favorites;
         break;
       case CATEGORY.RECENT:
-        ret = this.getMenuChannelsBySet(this.recentSet);
+        map = favorites;
         break;
       case CATEGORY.DEFAULT:
-        ret = this.state.channels;
+        map = channels;
         break;
       default:
         break;
     }
 
-    return ret;
+    return map;
   }
 
   async init() {
-    const channels = await Player.getChannels();
-    const favorites = await storage.load(storageKey.FAVORITES);
-    const recent = await storage.load(storageKey.RECENT);
-    let activeCategory = await storage.load(storageKey.ACTIVE_CATEGORY);
-    let activeChannel = await storage.load(storageKey.ACTIVE_CHANNEL);
+    await this.context.player.initChannels();
 
-    let favZero;
-
-    Object.keys(favorites || {}).forEach((id) => {
-      if (favorites[id]) {
-        favZero = channels.find((it) => it.channelNum.toString === id);
-      }
-    });
-
-    let recentZero;
-
-    Object.keys(recent || {}).forEach((id) => {
-      if (recent[id]) {
-        recentZero = channels.find((it) => it.channelNum.toString === id);
-      }
-    });
+    const { channels, favorites, recent, activeChannel, activeCategory } = this.context.player;
 
     let menuFocusAt = MENU_FOCUS_AT.CATEGORY;
 
     if (!activeCategory) {
-      if (favZero) {
-        activeCategory = CATEGORY.FAVOURITE;
-      } else if (recentZero) {
-        activeCategory = CATEGORY.RECENT;
+      let ret;
+
+      if (favorites.size) {
+        ret = CATEGORY.FAVOURITE;
+      } else if (recent.size) {
+        ret = CATEGORY.RECENT;
       } else {
-        activeCategory = CATEGORY.DEFAULT;
+        ret = CATEGORY.DEFAULT;
       }
-    } else if (activeCategory === CATEGORY.FAVOURITE && favZero) {
+
+      this.context.player.updateActiveCategory(ret);
+    } else if (activeCategory === CATEGORY.FAVOURITE && favorites.size) {
       menuFocusAt = MENU_FOCUS_AT.CHANNEL;
-    } else if (activeCategory === CATEGORY.RECENT && recentZero) {
+    } else if (activeCategory === CATEGORY.RECENT && recent.size) {
       menuFocusAt = MENU_FOCUS_AT.CHANNEL;
-    } else if (channels.length) {
+    } else if (channels.size) {
       menuFocusAt = MENU_FOCUS_AT.CHANNEL;
     }
 
     if (!activeChannel) {
+      let ret;
+
       if (activeCategory === CATEGORY.FAVOURITE) {
-        activeChannel = favZero;
+        ret = favorites.values().next().value;
       } else if (activeCategory === CATEGORY.RECENT) {
-        activeChannel = recentZero;
+        ret = recent.values().next().value;
       } else {
-        activeChannel = channels?.[0];
+        ret = channels.values().next().value;
       }
+
+      this.context.player.updateActiveChannel(ret);
     }
 
-    this.setState({
-      channels,
-      activeCategory,
-      menuFocusAt,
-      activeChannel,
-      favorites,
-    });
+    this.setState({ menuFocusAt });
   }
 
   changeChannel(eventType) {
-    const { activeChannel, status, inputNum } = this.state;
+    const { activeChannel, channels } = this.context.player;
+    const { status, inputNum } = this.state;
 
     switch (eventType) {
       case EVENT_TYPE.DOWN:
-        this.setState({ activeChannel: activeChannel.next });
+        this.context.player.updateActiveChannel(channels.get(activeChannel.next));
         break;
       case EVENT_TYPE.UP:
-        this.setState({ activeChannel: activeChannel.prev });
+        this.context.player.updateActiveChannel(channels.get(activeChannel.prev));
         break;
       case EVENT_TYPE.LEFT:
       case EVENT_TYPE.RIGHT:
@@ -227,7 +148,9 @@ class Player extends Component {
   }
 
   getCategory(arrow = ARROW.UP) {
-    const idx = CATEGORY_OPT.findIndex((it) => it.value === this.state.activeCategory);
+    const { activeCategory } = this.context.player;
+
+    const idx = CATEGORY_OPT.findIndex((it) => it.value === activeCategory);
     let category;
     if (arrow === ARROW.UP) {
       category =
@@ -241,24 +164,30 @@ class Player extends Component {
   }
 
   changeCategory(eventType) {
+    let activeCategory;
+
     switch (eventType) {
       case EVENT_TYPE.DOWN:
-        this.setState({ activeCategory: this.getCategory(ARROW.DOWN) });
+        activeCategory = this.getCategory(ARROW.DOWN);
         break;
       case EVENT_TYPE.UP:
-        this.setState({ activeCategory: this.getCategory(ARROW.UP) });
+        activeCategory = this.getCategory(ARROW.UP);
         break;
       default:
         break;
     }
+
+    this.context.player.updateActiveCategory(activeCategory);
   }
 
   onPress(eventType) {
     console.log(eventType, this.state, 'eventType');
 
-    const { channels, status, menuFocusAt, activeChannel, favorites } = this.state;
+    const { channels, activeChannel } = this.context.player;
 
-    if (!channels.length) {
+    const { status, menuFocusAt } = this.state;
+
+    if (!channels.size) {
       ToastAndroid.showWithGravityAndOffset(
         '当前无播放列表！',
         ToastAndroid.SHORT,
@@ -273,7 +202,7 @@ class Player extends Component {
       switch (eventType) {
         case EVENT_TYPE.SELECT:
           this.setState({
-            menuFocusAt: this.menuChannels.length ? MENU_FOCUS_AT.CHANNEL : MENU_FOCUS_AT.CATEGORY,
+            menuFocusAt: this.menuChannels.size ? MENU_FOCUS_AT.CHANNEL : MENU_FOCUS_AT.CATEGORY,
           });
           this.showMenu();
           break;
@@ -284,7 +213,7 @@ class Player extends Component {
     } else if (status === STATUS.IN_MENU) {
       switch (eventType) {
         case EVENT_TYPE.SELECT:
-          if (menuFocusAt === MENU_FOCUS_AT.CATEGORY && this.menuChannels.length) {
+          if (menuFocusAt === MENU_FOCUS_AT.CATEGORY && this.menuChannels.size) {
             this.setState({ menuFocusAt: MENU_FOCUS_AT.CHANNEL });
           } else {
             this.setState({ status: STATUS.IN_PLAY });
@@ -296,17 +225,12 @@ class Player extends Component {
           break;
         case EVENT_TYPE.RIGHT:
           if (menuFocusAt === MENU_FOCUS_AT.CATEGORY) {
-            if (this.menuChannels.length) {
+            if (this.menuChannels.size) {
               this.setState({ menuFocusAt: MENU_FOCUS_AT.CHANNEL });
             }
           } else {
-            favorites[activeChannel.channelNum] = !favorites[activeChannel.channelNum];
-            this.setState({ favorites });
-            storage.save(
-              storageKey.FAVORITES,
-              activeChannel.channelNum,
-              favorites[activeChannel.channelNum],
-            );
+            const channel = channels.get(activeChannel.channelNum);
+            this.context.player.updateChannel({ ...channel, favorite: !channel.favorite });
           }
           break;
         default:
@@ -338,32 +262,22 @@ class Player extends Component {
   }
 
   gotoInputChannelNum() {
-    const { channels, inputNum } = this.state;
+    const { channels } = this.context.player;
+    const { inputNum } = this.state;
 
-    const activeChannel = channels.find((it) => `${it.channelNum}` === inputNum);
+    const activeChannel = channels.get(inputNum);
 
-    this.setState(
-      {
-        activeChannel: activeChannel || this.state.activeChannel,
-        inputNum: '',
-      },
-      this.showInfo,
-    );
+    if (activeChannel) {
+      this.context.player.updateActiveChannel(activeChannel);
+    }
+
+    this.setState({ inputNum: '' }, this.showInfo);
   }
 
   render() {
-    const {
-      loading,
-      error,
-      activeChannel,
-      status,
-      activeCategory,
-      infoVisible,
-      menuFocusAt,
-      inputNum,
-      favorites,
-    } = this.state;
+    const { channels, activeChannel } = this.context.player;
 
+    const { loading, error, status, infoVisible, menuFocusAt, inputNum } = this.state;
     return (
       <View style={style.player}>
         <View style={[style.inputNumWrap, inputNum ? null : style.hide]}>
@@ -372,10 +286,6 @@ class Player extends Component {
         {status === STATUS.IN_MENU && (
           <Menu
             visible={status === STATUS.IN_MENU}
-            favorites={favorites}
-            channels={this.menuChannels}
-            activeCategory={activeCategory}
-            activeChannel={activeChannel}
             menuFocusAt={menuFocusAt}
           />
         )}
@@ -397,7 +307,7 @@ class Player extends Component {
                 </Text>
                 <Text style={style.errInfo}>错误信息：{error?.errorString}</Text>
                 <Text style={style.errInfo}>错误详情：{error?.errorException}</Text>
-                <Text style={style.errInfo}>播放源：{activeChannel?.src}</Text>
+                <Text style={style.errInfo}>播放源：{channels.get(activeChannel)?.src}</Text>
               </View>
             </View>
           </View>
@@ -405,7 +315,7 @@ class Player extends Component {
             style={style.video}
             repeat
             resizeMode={'contain'}
-            source={{ uri: mergeUrl(`${activeChannel?.src}123`), type: 'm3u8' }}
+            source={{ uri: mergeUrl(activeChannel?.src), type: 'm3u8' }}
             onError={(e) => this.setState({ loading: false, error: e.error })}
             onReadyForDisplay={() => this.setState({ loading: false, error: null })}
           />

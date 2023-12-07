@@ -1,5 +1,7 @@
 import { View } from 'react-native';
 import { useRef } from 'react';
+import { observer } from 'mobx-react';
+import mobx, { MobxContext } from '@/store';
 import Player from '@/view/Player';
 import VirtualKeypad from '@/component/VirtualKeypad';
 import { KeypadListener } from '@/util';
@@ -21,14 +23,22 @@ function App() {
   };
 
   return (
-    <View
-      style={{ height: '100%', width: '100%', flex: 1, borderWidth: 0, borderColor: 'transparent' }}
-    >
-      <VirtualKeypad onPress={onPress} />
-      <KeypadListener onPress={onPress} />
-      <Player onPressRef={onPressRef} />
-    </View>
+    <MobxContext.Provider value={mobx}>
+      <View
+        style={{
+          height: '100%',
+          width: '100%',
+          flex: 1,
+          borderWidth: 0,
+          borderColor: 'transparent',
+        }}
+      >
+        <VirtualKeypad onPress={onPress} />
+        <KeypadListener onPress={onPress} />
+        <Player onPressRef={onPressRef} />
+      </View>
+    </MobxContext.Provider>
   );
 }
 
-export default App;
+export default observer(App);

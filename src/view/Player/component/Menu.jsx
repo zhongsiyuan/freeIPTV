@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Image, Text, FlatList, View } from 'react-native';
 import { px2dp } from '@/util';
+import { useStore } from '@/store';
 import { CATEGORY_OPT, MENU_FOCUS_AT } from '../constant';
 import style from './menu.style';
 
@@ -24,7 +25,7 @@ const CategoryItem = ({ menuFocusAt, category, active }) => {
   );
 };
 
-const ChannelItem = ({ favorite, channel, active, onPress, menuFocusAt }) => {
+const ChannelItem = ({ channel, active, onPress, menuFocusAt }) => {
   return (
     <View
       style={[
@@ -35,7 +36,9 @@ const ChannelItem = ({ favorite, channel, active, onPress, menuFocusAt }) => {
       onPress={onPress}
     >
       <View>
-        <Text style={[style.channelNo, favorite ? style.fav : null]}>{channel.channelNum}</Text>
+        <Text style={[style.channelNo, channel.favorite ? style.fav : null]}>
+          {channel.channelNum}
+        </Text>
       </View>
       <View style={style.channelInfo}>
         <Text style={style.channelTitle}>{channel.title}</Text>
@@ -56,14 +59,16 @@ const ChannelItem = ({ favorite, channel, active, onPress, menuFocusAt }) => {
   );
 };
 
-export default ({ visible, favorites, channels, activeCategory, activeChannel, menuFocusAt }) => {
+export default ({ visible, menuFocusAt }) => {
+  const { activeCategory, activeChannel, menuChannels, menuChannelList } = useStore('player');
+
   const flatListRef = useRef();
 
   useEffect(() => {
-    if (channels.length && activeChannel && flatListRef.current) {
+    if (menuChannels.size && menuChannels.has(activeChannel.channelNum) && flatListRef.current) {
       flatListRef.current.scrollToIndex({ index: activeChannel.index });
     }
-  }, [activeChannel, channels.length]);
+  }, [activeChannel, menuChannels]);
 
   return (
     <View style={[style.menu, visible ? null : style.hide]}>
@@ -83,19 +88,18 @@ export default ({ visible, favorites, channels, activeCategory, activeChannel, m
         ))}
       </View>
       <View style={style.channel}>
-        {channels.length ? (
+        {menuChannels.size ? (
           <FlatList
             ref={flatListRef}
             style={[
               style.channel,
               menuFocusAt === MENU_FOCUS_AT.CHANNEL ? style.light : style.unlight,
             ]}
-            data={channels}
+            data={menuChannelList}
             renderItem={({ item }) => (
               <ChannelItem
                 menuFocusAt={menuFocusAt}
                 channel={item}
-                favorite={favorites[item.channelNum]}
                 active={activeChannel.channelNum === item.channelNum}
               />
             )}

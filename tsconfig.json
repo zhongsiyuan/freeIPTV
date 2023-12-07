@@ -1,6 +1,7 @@
 {
   "extends": "@tsconfig/react-native/tsconfig.json",
   "compilerOptions": {
+    "experimentalDecorators": true,
     "skipLibCheck": true,
     "jsx": "react-native",
     "baseUrl": ".",
