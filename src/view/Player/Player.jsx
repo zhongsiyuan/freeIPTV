@@ -49,28 +49,6 @@ class Player extends Component {
     this.props.onPressRef?.current?.delete(this.pubOnPress);
   }
 
-  get menuChannels() {
-    const { channels, favorites, activeCategory } = this.context.player;
-
-    let map = new Map();
-
-    switch (activeCategory) {
-      case CATEGORY.FAVOURITE:
-        map = favorites;
-        break;
-      case CATEGORY.RECENT:
-        map = favorites;
-        break;
-      case CATEGORY.DEFAULT:
-        map = channels;
-        break;
-      default:
-        break;
-    }
-
-    return map;
-  }
-
   async init() {
     await this.context.player.initChannels();
 
@@ -116,34 +94,50 @@ class Player extends Component {
   }
 
   changeChannel(eventType) {
-    const { activeChannel, channels } = this.context.player;
+    const { activeChannel, channels, menuChannels } = this.context.player;
     const { status, inputNum } = this.state;
 
-    switch (eventType) {
-      case EVENT_TYPE.DOWN:
-        this.context.player.updateActiveChannel(channels.get(activeChannel.next));
-        break;
-      case EVENT_TYPE.UP:
-        this.context.player.updateActiveChannel(channels.get(activeChannel.prev));
-        break;
-      case EVENT_TYPE.LEFT:
-      case EVENT_TYPE.RIGHT:
-        break;
-      default:
-        if (!NUM_EVENT_TYPES.includes(eventType)) {
-          return;
-        }
-
-        if (inputNum.length >= NUM_CHANGE_CHANNEL_MAX_DIGITS) {
-          this.gotoInputChannelNum();
-        } else {
-          this.setState({ inputNum: `${inputNum}${eventType}` }, this.delayGotoInputNum);
-        }
-        return;
-    }
-
     if (status === STATUS.IN_PLAY) {
+      switch (eventType) {
+        case EVENT_TYPE.DOWN:
+          this.context.player.updateActiveChannel(channels.get(activeChannel.next));
+          break;
+        case EVENT_TYPE.UP:
+          this.context.player.updateActiveChannel(channels.get(activeChannel.prev));
+          break;
+        case EVENT_TYPE.LEFT:
+        case EVENT_TYPE.RIGHT:
+          break;
+        default:
+          if (!NUM_EVENT_TYPES.includes(eventType)) {
+            return;
+          }
+
+          if (inputNum.length >= NUM_CHANGE_CHANNEL_MAX_DIGITS) {
+            this.gotoInputChannelNum();
+          } else {
+            this.setState({ inputNum: `${inputNum}${eventType}` }, this.delayGotoInputNum);
+          }
+          return;
+      }
+
       this.showInfo();
+    } else {
+      let ret;
+
+      switch (eventType) {
+        case EVENT_TYPE.DOWN:
+          ret = menuChannels.get(activeChannel.next);
+          break;
+        case EVENT_TYPE.UP:
+          ret = menuChannels.get(activeChannel.prev);
+          break;
+        default:
+          ret = menuChannels.entries().next().value;
+          break;
+      }
+
+      this.context.player.updateActiveChannel(ret);
     }
   }
 
@@ -183,7 +177,7 @@ class Player extends Component {
   onPress(eventType) {
     console.log(eventType, this.state, 'eventType');
 
-    const { channels, activeChannel } = this.context.player;
+    const { channels, activeChannel, menuChannels } = this.context.player;
 
     const { status, menuFocusAt } = this.state;
 
@@ -202,7 +196,7 @@ class Player extends Component {
       switch (eventType) {
         case EVENT_TYPE.SELECT:
           this.setState({
-            menuFocusAt: this.menuChannels.size ? MENU_FOCUS_AT.CHANNEL : MENU_FOCUS_AT.CATEGORY,
+            menuFocusAt: menuChannels.size ? MENU_FOCUS_AT.CHANNEL : MENU_FOCUS_AT.CATEGORY,
           });
           this.showMenu();
           break;
@@ -213,7 +207,7 @@ class Player extends Component {
     } else if (status === STATUS.IN_MENU) {
       switch (eventType) {
         case EVENT_TYPE.SELECT:
-          if (menuFocusAt === MENU_FOCUS_AT.CATEGORY && this.menuChannels.size) {
+          if (menuFocusAt === MENU_FOCUS_AT.CATEGORY && menuChannels.size) {
             this.setState({ menuFocusAt: MENU_FOCUS_AT.CHANNEL });
           } else {
             this.setState({ status: STATUS.IN_PLAY });
@@ -225,12 +219,14 @@ class Player extends Component {
           break;
         case EVENT_TYPE.RIGHT:
           if (menuFocusAt === MENU_FOCUS_AT.CATEGORY) {
-            if (this.menuChannels.size) {
+            if (menuChannels.size) {
               this.setState({ menuFocusAt: MENU_FOCUS_AT.CHANNEL });
             }
           } else {
-            const channel = channels.get(activeChannel.channelNum);
-            this.context.player.updateChannel({ ...channel, favorite: !channel.favorite });
+            const channel = menuChannels.get(activeChannel.channelNum);
+            if (channel) {
+              this.context.player.updateChannel({ ...channel, favorite: !channel.favorite });
+            }
           }
           break;
         default:
@@ -315,7 +311,7 @@ class Player extends Component {
             style={style.video}
             repeat
             resizeMode={'contain'}
-            source={{ uri: mergeUrl(activeChannel?.src), type: 'm3u8' }}
+            source={{ uri: mergeUrl(activeChannel?.src) + '123', type: 'm3u8' }}
             onError={(e) => this.setState({ loading: false, error: e.error })}
             onReadyForDisplay={() => this.setState({ loading: false, error: null })}
           />

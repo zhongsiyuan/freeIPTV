@@ -38,6 +38,8 @@ const ChannelItem = ({ channel, active, onPress, menuFocusAt }) => {
       <View>
         <Text style={[style.channelNo, channel.favorite ? style.fav : null]}>
           {channel.channelNum}
+          nx: {channel.next}
+          pr: {channel.prev}
         </Text>
       </View>
       <View style={style.channelInfo}>
@@ -66,6 +68,8 @@ export default ({ visible, menuFocusAt }) => {
 
   useEffect(() => {
     if (menuChannels.size && menuChannels.has(activeChannel.channelNum) && flatListRef.current) {
+      console.log(menuChannels, 'ssssdddd');
+      console.log(activeChannel, 'dddssss');
       flatListRef.current.scrollToIndex({ index: activeChannel.index });
     }
   }, [activeChannel, menuChannels]);
