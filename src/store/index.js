@@ -1,11 +1,7 @@
 import { createContext, useContext } from 'react';
 import player from './player';
 
-const mobx = {
-  player,
-};
-
-export const MobxContext = createContext(mobx);
+export const MobxContext = createContext(null);
 
 export const useStore = (moduleName) => {
   const Context = useContext(MobxContext);
@@ -13,4 +9,4 @@ export const useStore = (moduleName) => {
   return moduleName ? Context[moduleName] : Context;
 };
 
-export default mobx;
+export default player;

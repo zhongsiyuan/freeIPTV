@@ -23,7 +23,7 @@ function App() {
   };
 
   return (
-    <MobxContext.Provider value={mobx}>
+    <MobxContext.Provider player={mobx.player} store={mobx} value={mobx}>
       <View
         style={{
           height: '100%',

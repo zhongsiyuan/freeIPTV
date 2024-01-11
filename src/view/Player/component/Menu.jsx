@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { Image, Text, FlatList, View } from 'react-native';
+import { observer } from 'mobx-react';
 import { px2dp } from '@/util';
 import { useStore } from '@/store';
-import { CATEGORY_OPT, MENU_FOCUS_AT } from '../constant';
+import Setting from './Setting';
+import { CATEGORY, CATEGORY_OPT, MENU_FOCUS_AT } from '../constant';
 import style from './menu.style';
 
 const CHANNEL_ITEM_HEIGHT = px2dp(76);
@@ -13,7 +15,7 @@ const CategoryItem = ({ menuFocusAt, category, active }) => {
       style={[
         style.categoryItem,
         active ? style.activeItem : null,
-        active && menuFocusAt === MENU_FOCUS_AT.CHANNEL ? style.unlightActive : null,
+        active && menuFocusAt === MENU_FOCUS_AT.SUB ? style.unlightActive : null,
       ]}
     >
       <Image
@@ -61,15 +63,13 @@ const ChannelItem = ({ channel, active, onPress, menuFocusAt }) => {
   );
 };
 
-export default ({ visible, menuFocusAt }) => {
-  const { activeCategory, activeChannel, menuChannels, menuChannelList } = useStore('player');
+export default observer(({ visible, menuFocusAt, changeSetting }) => {
+  const { activeCategory, activeChannel, menuChannels, menuChannelList } = useStore();
 
   const flatListRef = useRef();
 
   useEffect(() => {
     if (menuChannels.size && menuChannels.has(activeChannel.channelNum) && flatListRef.current) {
-      console.log(menuChannels, 'ssssdddd');
-      console.log(activeChannel, 'dddssss');
       flatListRef.current.scrollToIndex({ index: activeChannel.index });
     }
   }, [activeChannel, menuChannels]);
@@ -92,13 +92,11 @@ export default ({ visible, menuFocusAt }) => {
         ))}
       </View>
       <View style={style.channel}>
+        {activeCategory === CATEGORY.SETTING && <Setting changeSetting={changeSetting} />}
         {menuChannels.size ? (
           <FlatList
             ref={flatListRef}
-            style={[
-              style.channel,
-              menuFocusAt === MENU_FOCUS_AT.CHANNEL ? style.light : style.unlight,
-            ]}
+            style={[style.channel, menuFocusAt === MENU_FOCUS_AT.SUB ? style.light : style.unlight]}
             data={menuChannelList}
             renderItem={({ item }) => (
               <ChannelItem
@@ -123,4 +121,4 @@ export default ({ visible, menuFocusAt }) => {
       </View>
     </View>
   );
-};
+});

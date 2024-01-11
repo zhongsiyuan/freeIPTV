@@ -1,13 +1,30 @@
-import { observable, action, computed } from 'mobx';
+import { observable, action, computed, makeAutoObservable } from 'mobx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from '@/util/axios';
 import { CATEGORY } from '@/view/Player/constant';
 
 const STORAGE_KEY = {
+  USE_REMOTE: 'useRemote',
+  REMOTE_URL: 'remoteUrl',
+  AUTO_UPDATE: 'autoUpdate',
+  ACTIVE_CHANNEL: 'activeChannel',
   CHANNELS: 'channels',
 };
 
 class Player {
+  constructor() {
+    makeAutoObservable(this);
+  }
+
+  @observable
+  useRemote = false;
+
+  @observable
+  remoteUrl = '';
+
+  @observable
+  autoUpdate = false;
+
   @observable
   channels = observable.map();
 
@@ -32,15 +49,47 @@ class Player {
     return this.getCategoryChannels('favorite');
   }
 
-  @computed
-  get recent() {
-    if (!this.channels.size) {
-      return new Map();
-    }
+  @action
+  updateUseRemote() {
+    console.log(this.useRemote, 'ut');
+    this.useRemote = !this.useRemote;
+    console.log(this.useRemote, 'ut2');
+    AsyncStorage.setItem(STORAGE_KEY.USE_REMOTE, this.useRemote ? '1' : '0');
+  }
 
-    const ret = new Map();
+  @action
+  updateRemoteUrl() {
+    this.remoteUrl = !this.remoteUrl;
+    AsyncStorage.setItem(STORAGE_KEY.REMOTE_URL, this.remoteUrl ? '1' : '0');
+  }
 
-    return ret;
+  @action
+  updateAutoUpdate() {
+    this.autoUpdate = !this.autoUpdate;
+    AsyncStorage.setItem(STORAGE_KEY.AUTO_UPDATE, this.autoUpdate ? '1' : '0');
+  }
+
+  @action
+  async updateChannels(data) {
+    const channels = observable.map();
+
+    let prev = data[data.length - 1].channelNum.toString();
+    data.forEach((channel, idx) => {
+      Object.assign(channel, {
+        ...channel,
+        index: idx,
+        prev,
+        next: data[data.length - 1 === idx ? 0 : idx + 1].channelNum.toString(),
+        channelNum: channel.channelNum.toString(),
+      });
+
+      prev = channel.channelNum.toString();
+
+      channels.set(channel.channelNum.toString(), channel);
+    });
+
+    this.channels.replace(channels);
+    await AsyncStorage.setItem(STORAGE_KEY.CHANNELS, JSON.stringify(channels.toJSON()));
   }
 
   @action
@@ -54,6 +103,8 @@ class Player {
 
       if (activeChannel) {
         this.updateActiveChannel(activeChannel);
+      } else {
+        // this.activeCategory = CATEGORY
       }
     }
 
@@ -65,6 +116,7 @@ class Player {
   @action
   updateActiveChannel(activeChannel) {
     this.activeChannel = activeChannel;
+    AsyncStorage.setItem(STORAGE_KEY.ACTIVE_CHANNEL, JSON.stringify(activeChannel));
   }
 
   @action
@@ -83,32 +135,19 @@ class Player {
 
   @action
   async initChannels() {
-    let channels = observable.map();
-    // await AsyncStorage.clear();
-    const ret = await AsyncStorage.getItem(STORAGE_KEY.CHANNELS);
-    if (ret) {
-      channels = new Map(JSON.parse(ret));
+    if (this.useRemote && this.autoUpdate) {
+      const { data } = await axios({ url: this.remoteUrl });
+      await this.updateChannels(data);
     } else {
-      const { data } = await axios({ url: '/channels' });
-      let prev = data[data.length - 1].channelNum.toString();
-      data.forEach((channel, idx) => {
-        Object.assign(channel, {
-          ...channel,
-          index: idx,
-          prev,
-          next: data[data.length - 1 === idx ? 0 : idx + 1].channelNum.toString(),
-          channelNum: channel.channelNum.toString(),
-        });
-
-        prev = channel.channelNum.toString();
-
-        channels.set(channel.channelNum.toString(), channel);
-      });
-
-      await AsyncStorage.setItem(STORAGE_KEY.CHANNELS, JSON.stringify(channels.toJSON()));
+      const ret = await AsyncStorage.getItem(STORAGE_KEY.CHANNELS);
+      if (ret) {
+        this.channels.replace(new Map(JSON.parse(ret)));
+      }
     }
 
-    this.channels.replace(channels);
+    this.useRemote = (await AsyncStorage.getItem(STORAGE_KEY.USE_REMOTE)) === '1';
+    this.remoteUrl = await AsyncStorage.getItem(STORAGE_KEY.REMOTE_URL);
+    this.autoUpdate = (await AsyncStorage.getItem(STORAGE_KEY.AUTO_UPDATE)) === '1';
   }
 
   /**
@@ -152,14 +191,11 @@ class Player {
    * @return {Map<any, any>}
    */
   getMenuChannelsByActiveCategory(activeCategory, ignoreIds = []) {
-    let ret;
+    let ret = new Map();
 
     switch (activeCategory) {
       case CATEGORY.FAVOURITE:
         ret = this.getCategoryChannels('favorite', ignoreIds);
-        break;
-      case CATEGORY.RECENT:
-        ret = this.getCategoryChannels('recent', ignoreIds);
         break;
       case CATEGORY.DEFAULT:
         ret = this.channels;

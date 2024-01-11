@@ -15,8 +15,8 @@ export const STATUS = {
  */
 export const CATEGORY = {
   FAVOURITE: 0,
-  RECENT: 1,
-  DEFAULT: 2,
+  DEFAULT: 1,
+  SETTING: 2,
 };
 
 /**
@@ -25,17 +25,17 @@ export const CATEGORY = {
  * */
 export const CATEGORY_OPT = [
   { value: CATEGORY.FAVOURITE, label: '收藏', icon: fav },
-  { value: CATEGORY.RECENT, label: '最近', icon: recent },
   { value: CATEGORY.DEFAULT, label: '默认', icon: def },
+  { value: CATEGORY.SETTING, label: '设置', icon: recent },
 ];
 
 /**
  * 当前激活菜单类别
- * @type {{CHANNEL: number, CATEGORY: number}}
+ * @type {{SUB: number, CATEGORY: number}}
  */
 export const MENU_FOCUS_AT = {
   CATEGORY: 0,
-  CHANNEL: 1,
+  SUB: 1,
 };
 
 /**
